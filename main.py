@@ -135,8 +135,10 @@ def complete_purchase(item):
         buy_items()
     else:
         try:
-            complete_purchase_input = int(input('How many ' + market[item][0] + ' do you want to purchase?\n>> '))
-            if cash > (complete_purchase_input * market[item][1]):
+            max_purchasable = int(cash / market[item][1])
+            complete_purchase_input = int(input('How many ' + market[item][0] + ' do you want to purchase? (max: '
+                                                + str(max_purchasable) + ')\n>> '))
+            if cash >= (complete_purchase_input * market[item][1]):
                 cash -= complete_purchase_input * market[item][1]
                 stash[item][1] += complete_purchase_input
                 show_stash()
@@ -171,7 +173,9 @@ def complete_sale(item):
         sell_items()
     else:
         try:
-            complete_sale_input = int(input('How many ' + market[item][0] + ' do you want to sell?\n>> '))
+            max_sellable = stash[item][1]
+            complete_sale_input = int(input('How many ' + market[item][0] + ' do you want to sell? (max: '
+                                            + str(max_sellable) + ')\n>> '))
             if stash[item][1] >= complete_sale_input:
                 stash[item][1] -= complete_sale_input
                 cash += complete_sale_input * market[item][1]
