@@ -8,7 +8,7 @@ The mechanics are rather simple. Just follow the prompts and use your best judge
 - [ ] Seperate out function definitions into separate modules.
 - [ ] Improve market reroll.
 - [ ] Add random event mechanic.
-- [ ] Improve start turn overview table.
+- [x] Improve start turn overview/position summary table.
 - [ ] Add cost to travel mechanic.
 - [ ] Add travel methods mechanic.
 - [ ] Improve buy/sell mechanic.
