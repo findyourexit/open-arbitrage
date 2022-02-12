@@ -1,14 +1,16 @@
 from tabulate import tabulate
 import random
+from marketplace import *
 
-market = [['a', 10.00, 5.00, 15.00],
-          ['b', 50.00, 25.00, 75.00],
-          ['c', 25.00, 12.50, 37.50],
-          ['d', 30.00, 15.00, 45.00],
-          ['e', 5.00, 2.50, 7.50],
-          ['f', 1.00, 0.50, 1.50]]
+market = [Item('a', 10.00),
+          Item('b', 50.00),
+          Item('c', 25.00),
+          Item('d', 30.00),
+          Item('e', 5.00),
+          Item('f', 1.00)]
+
 stash = [['a', 0], ['b', 0], ['c', 0], ['d', 0], ['e', 50], ['f', 0]]
-cities = (['Sydney'], ['Melbourne'], ['Zurich'], ['New York'], ['Milano'], ['Santa Barbara'])
+cities = ('Sydney', 'Melbourne', 'Zurich', 'New York', 'Milano', 'Santa Barbara')
 cash = 200
 loan = 10000
 loan_max = 100000
@@ -51,11 +53,7 @@ def end_game():
 
 
 def position_summary():  # This needs to be formatted such that it can appear in an easily digested table.
-    show_current_city()
-    show_market()
-    show_stash()
-    show_loan_outstanding()
-    show_cash_available()
+    show_position_summary()
 
 
 def player_input():
@@ -130,19 +128,20 @@ def buy_items():
 
 def complete_purchase(item):
     global cash
-    if market[item][1] > cash:
-        print('You can\'t afford any ' + market[item][0] + '. Choose something in your budget...')
+    if market[item].value > cash:
+        print('You can\'t afford any ' + market[item].name + '. Choose something in your budget...')
         buy_items()
     else:
         try:
-            complete_purchase_input = int(input('How many ' + market[item][0] + ' do you want to purchase?\n>> '))
-            if cash > (complete_purchase_input * market[item][1]):
-                cash -= complete_purchase_input * market[item][1]
+            complete_purchase_input = int(input('How many ' + market[item].name + ' do you want to purchase?\n>> '))
+            if cash > (complete_purchase_input * market[item].value):
+                cash -= complete_purchase_input * market[item].value
                 stash[item][1] += complete_purchase_input
                 show_stash()
                 player_input()
             else:
-                print('You\'ve not enough cash for ' + str(complete_purchase_input) + ' of ' + market[item][0] + '.')
+                print('You\'ve not enough cash for ' + str(complete_purchase_input) + ' of ' + market[item].name
+                      + '.')
                 complete_purchase(item)
         except ValueError:
             print('Invalid input. Please try again...')
@@ -167,18 +166,18 @@ def sell_items():
 def complete_sale(item):
     global cash
     if stash[item][1] == 0:
-        print('You\'ve got no ' + market[item][0] + ' to sell...')
+        print('You\'ve got no ' + market[item].name + ' to sell...')
         sell_items()
     else:
         try:
-            complete_sale_input = int(input('How many ' + market[item][0] + ' do you want to sell?\n>> '))
+            complete_sale_input = int(input('How many ' + market[item].name + ' do you want to sell?\n>> '))
             if stash[item][1] >= complete_sale_input:
                 stash[item][1] -= complete_sale_input
-                cash += complete_sale_input * market[item][1]
+                cash += complete_sale_input * market[item].value
                 show_stash()
                 player_input()
             else:
-                print('You\'ve not enough ' + market[item][0] + ' to sell.')
+                print('You\'ve not enough ' + market[item].name + ' to sell.')
                 complete_sale(item)
         except ValueError:
             print('Invalid input. Please try again...')
@@ -220,13 +219,14 @@ def pay_loan():
 
 def reroll_market():
     for item in market:
-        reroll = item[1] * random.uniform(0.5, 1.5)
-        if reroll < item[2]:
-            item[1] = item[2]
-        elif reroll > item[3]:
-            item[1] = item[3]
+        item.last_value = item.value
+        reroll = item.value * random.uniform(0.5, 1.5)
+        if reroll < item.min_value:
+            item.value = item.min_value
+        elif reroll > item.max_value:
+            item.value = item.max_value
         else:
-            item[1] = reroll
+            item.value = reroll
 
 
 def compound_loan(days):
@@ -252,8 +252,10 @@ def show_stash():
 
 def show_market():
     print('Local market values in ' + cities[current_city][0] + ' are:')
-    print(tabulate(market, headers=["Item", "Price ($)", "Min ($)", "Max ($)"], tablefmt="simple", floatfmt=".2f")
-          + '\n')
+    print('Item'.ljust(10) + '| Price ($)'.ljust(15))
+    print(''.ljust(10, '-') + '+'.ljust(15, '-'))
+    for item in market:
+        print(str(item.name).ljust(10) + f'| ${item.value:.2f}'.ljust(15))
 
 
 def show_current_city():
@@ -266,6 +268,21 @@ def show_loan_outstanding():
 
 def show_cash_available():
     print('Available cash (liquidity): $' + str(cash) + '.\n')
+
+
+def show_position_summary():
+    print('+-[ POSITION SUMMARY ]'.ljust(69, '-') + '+')
+    print('| Available cash (liquidity): '.ljust(40) + str(f'${cash:.2f}').ljust(29) + '|')
+    print('| Loan amount (total outstanding): '.ljust(40) + str(f'${loan:.2f}').ljust(29) + '|')
+    print('| Current city: '.ljust(40) + cities[current_city].ljust(29) + '|')
+    print('+-[ MARKET SUMMARY ]'.ljust(69, '-') + '+')
+    for item in market:
+        print(('| ' + item.name).ljust(40) + str(f'${item.value:.2f}').ljust(29) + '|')
+    print('+-[ STASH SUMMARY ]'.ljust(69, '-') + '+')
+    for item in stash:
+        print(('| ' + item[0]).ljust(40) + str(f'{item[1]}').ljust(29) + '|')
+    print('+'.ljust(69, '-') + '+')
+    print('\n')
 
 
 if __name__ == '__main__':
