@@ -83,7 +83,12 @@ def player_input():
 
 
 def change_city():
-    print(tabulate(cities, headers=['Where would you like to go? (0-5)'], tablefmt="simple", showindex="always"))
+    print('Where would you like to go? (0-5)')
+    print('+-[ CHANGE CITY ]'.ljust(49, '-') + '+')
+    for index, city in enumerate(cities):
+        print(('| ' + str(index)).ljust(20) + city.ljust(29) + '|')
+    print('+'.ljust(49, '-') + '+')
+    print('\n')
     try:
         change_city_input = int(input(">> "))
         print('\n')
