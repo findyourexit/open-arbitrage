@@ -1,6 +1,11 @@
 class Player:
-    def __init__(self, name):
-        self.name = name
+    def __init__(self):
+        self.name = 'Unknown'
+        self.cash = 200
+        self.loan = 10000
+        self.loan_max = 100000
+        self.interest_rate = 0.20
+        self.current_city = 0
         self.stash = []
 
     def stash_add(self, item, quantity):

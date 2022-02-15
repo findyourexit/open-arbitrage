@@ -1,4 +1,3 @@
-from tabulate import tabulate
 import random
 from marketplace import *
 from player import *
@@ -9,20 +8,14 @@ market = [Item('a', 10.00),
           Item('d', 30.00),
           Item('e', 5.00),
           Item('f', 1.00)]
-
-player = Player('Tom')
-
 cities = ('Sydney', 'Melbourne', 'Zurich', 'New York', 'Milano', 'Santa Barbara')
-cash = 200
-loan = 10000
-loan_max = 100000
-interest_rate = 0.20
-current_city = 0
+player = Player()
 
 
 def start_game(name):
+    player.name = name
     print('|-------------------------------------------------------|')
-    print(f'| Welcome, {(name + ".").ljust(30)}               |')
+    print(f'| Welcome, {(player.name + ".").ljust(30)}               |')
     print('|                                                       |')
     print('| The rules are rather simple. Just follow the prompts  |')
     print('| and use your best judgement to turn a profit by       |')
@@ -56,22 +49,20 @@ def end_game():
 
 
 def player_input():
-    print(tabulate([['What would you like to do? (0-3)'],
-                    ['Sell items(s)'],
-                    ['Buy items(s)'],
-                    ['Change city'],
-                    ['Pay loan']],
-                   tablefmt="simple", showindex="always", headers="firstrow"))
+    show_player_input_menu()
     try:
         top_menu_input = int(input(">> "))
         print('\n')
         if top_menu_input == 0:
-            sell_items()
+            show_position_summary()
+            player_input()
         elif top_menu_input == 1:
-            buy_items()
+            sell_items()
         elif top_menu_input == 2:
-            change_city()  # End turn equivalent?
+            buy_items()
         elif top_menu_input == 3:
+            change_city()  # End turn equivalent?
+        elif top_menu_input == 4:
             pay_loan()
         else:
             print('Invalid input. Please try again...')
@@ -92,19 +83,18 @@ def change_city():
         change_city_input = int(input(">> "))
         print('\n')
         if 0 <= change_city_input <= 5:
-            global current_city
-            if change_city_input != current_city:
-                current_city = change_city_input
-                print('You\'re now in ' + cities[current_city] + '.')
+            if change_city_input != player.current_city:
+                player.current_city = change_city_input
+                print('You\'re now in ' + cities[player.current_city] + '.')
                 reroll_market()
                 compound_loan(1)
-                if loan >= loan_max:
+                if player.loan >= player.loan_max:
                     print('You\'re drowning in debt.')
                     end_game()
                 else:
                     start_turn()
             else:
-                print('You\'re already in ' + cities[current_city] + '.')
+                print('You\'re already in ' + cities[player.current_city] + '.')
                 player_input()
         else:
             print('Invalid input. Please try again...')
@@ -131,17 +121,16 @@ def buy_items():
 
 
 def complete_purchase(item):
-    global cash
-    if market[item].value > cash:
+    if market[item].value > player.cash:
         print('You can\'t afford any ' + market[item].name + '. Choose something in your budget...')
         buy_items()
     else:
         try:
-            max_purchasable = int(cash / market[item].value)
+            max_purchasable = int(player.cash / market[item].value)
             complete_purchase_input = int(input('How many ' + market[item].name + ' do you want to purchase? (max: '
                                                 + str(max_purchasable) + ')\n>> '))
-            if cash >= (complete_purchase_input * market[item].value):
-                cash -= complete_purchase_input * market[item].value
+            if player.cash >= (complete_purchase_input * market[item].value):
+                player.cash -= complete_purchase_input * market[item].value
                 player.stash_add(market[item], complete_purchase_input)
                 show_stash()
                 player_input()
@@ -170,7 +159,6 @@ def sell_items():
 
 
 def complete_sale(item):
-    global cash
     stash_item = player.stash_get(market[item])
     if stash_item is not None:
         max_sellable = stash_item[1]
@@ -179,7 +167,7 @@ def complete_sale(item):
                                             + str(max_sellable) + ')\n>> '))
             if stash_item[1] >= complete_sale_input:
                 stash_item[1] -= complete_sale_input
-                cash += complete_sale_input * market[item].value
+                player.cash += complete_sale_input * market[item].value
                 show_stash()
                 player_input()
             else:
@@ -197,30 +185,29 @@ def pay_loan():
     show_loan_outstanding()
     show_cash_available()
 
-    global cash, loan
-    if cash <= 0:
+    if player.cash <= 0:
         print('You\'ve got no cash to use to repay your loan.')
         player_input()
     try:
-        pay_loan_input = int(input('How much of your loan would you like to repay? (1-' + str(cash) + ')\n>> '))
-        if pay_loan_input > cash:
+        pay_loan_input = int(input('How much of your loan would you like to repay? (1-' + str(player.cash) + ')\n>> '))
+        if pay_loan_input > player.cash:
             print('You don\'t have $' + str(pay_loan_input) + ' to use to pay off your loan.')
             pay_loan()
         elif pay_loan_input <= 0:
             print('Please enter an amount that\'s greater than zero.')
             pay_loan()
         else:
-            if pay_loan_input > loan:
+            if pay_loan_input > player.loan:
                 print('Paying back more than you owe? Show off. Nicely done though!')
                 end_game()
-            elif pay_loan_input == loan:
+            elif pay_loan_input == player.loan:
                 print('Paying out your loan? Nice one!')
                 end_game()
             else:
-                print('Paid $' + str(pay_loan_input) + ' back into loan. $' + str(loan - pay_loan_input)
+                print('Paid $' + str(pay_loan_input) + ' back into loan. $' + str(player.loan - pay_loan_input)
                       + ' outstanding.')
-                loan -= pay_loan_input
-                cash -= pay_loan_input
+                player.loan -= pay_loan_input
+                player.cash -= pay_loan_input
                 player_input()
     except ValueError:
         print('Invalid input. Please try again...')
@@ -240,9 +227,8 @@ def reroll_market():
 
 
 def compound_loan(days):
-    global loan
     for i in range(days):
-        loan += loan * interest_rate
+        player.loan += player.loan * player.interest_rate
 
 
 def intro():
@@ -264,8 +250,19 @@ def show_stash():
     print('\n')
 
 
+def show_player_input_menu():
+    print('What would you like to do? (0-3)')
+    print('+'.ljust(10, '-') + '+'.ljust(19, '-') + '+')
+    print('| 0'.ljust(10) + '| Show overview'.ljust(19) + '|')
+    print('| 1'.ljust(10) + '| Sell items(s)'.ljust(19) + '|')
+    print('| 2'.ljust(10) + '| Buy items(s)'.ljust(19) + '|')
+    print('| 3'.ljust(10) + '| Change city'.ljust(19) + '|')
+    print('| 4'.ljust(10) + '| Pay loan'.ljust(19) + '|')
+    print('+'.ljust(10, '-') + '+'.ljust(19, '-') + '+')
+
+
 def show_market():
-    print('Local market values in ' + cities[current_city] + ' are:')
+    print('Local market values in ' + cities[player.current_city] + ' are:')
     print('Item'.ljust(10) + '| Price ($)'.ljust(15))
     print(''.ljust(10, '-') + '+'.ljust(15, '-'))
     for item in market:
@@ -274,22 +271,22 @@ def show_market():
 
 
 def show_current_city():
-    print('Your current city is ' + cities[current_city][0] + '.\n')
+    print('Your current city is ' + cities[player.current_city] + '.\n')
 
 
 def show_loan_outstanding():
-    print('Loan amount (total outstanding): $' + str(loan) + '.\n')
+    print('Loan amount (total outstanding): $' + str(player.loan) + '.\n')
 
 
 def show_cash_available():
-    print('Available cash (liquidity): $' + str(cash) + '.\n')
+    print('Available cash (liquidity): $' + str(player.cash) + '.\n')
 
 
 def show_position_summary():
     print('+-[ POSITION SUMMARY ]'.ljust(69, '-') + '+')
-    print('| Available cash (liquidity): '.ljust(40) + str(f'${cash:.2f}').ljust(29) + '|')
-    print('| Loan amount (total outstanding): '.ljust(40) + str(f'${loan:.2f}').ljust(29) + '|')
-    print('| Current city: '.ljust(40) + cities[current_city].ljust(29) + '|')
+    print('| Available cash (liquidity): '.ljust(40) + str(f'${player.cash:.2f}').ljust(29) + '|')
+    print('| Loan amount (total outstanding): '.ljust(40) + str(f'${player.loan:.2f}').ljust(29) + '|')
+    print('| Current city: '.ljust(40) + cities[player.current_city].ljust(29) + '|')
     print('+-[ MARKET SUMMARY ]'.ljust(69, '-') + '+')
     for item in market:
         print(('| ' + item.name).ljust(40) + str(f'${item.value:.2f}').ljust(29) + '|')
