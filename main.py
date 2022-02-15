@@ -288,8 +288,8 @@ def show_position_summary():
     for item in market:
         print(('| ' + item.name).ljust(40) + str(f'${item.value:.2f}').ljust(29) + '|')
     print('+-[ STASH SUMMARY ]'.ljust(69, '-') + '+')
-    for item in stash:
-        print(('| ' + item[0]).ljust(40) + str(f'{item[1]}').ljust(29) + '|')
+    for item in player.stash:
+        print(('| ' + item[0].name).ljust(40) + str(item[1]).ljust(29) + '|')
     print('+'.ljust(69, '-') + '+')
     print('\n')
 
