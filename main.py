@@ -12,7 +12,6 @@ market = [Item('a', 10.00),
 
 player = Player('Tom')
 
-stash = [['a', 0], ['b', 0], ['c', 0], ['d', 0], ['e', 50], ['f', 0]]
 cities = ('Sydney', 'Melbourne', 'Zurich', 'New York', 'Milano', 'Santa Barbara')
 cash = 200
 loan = 10000
@@ -96,7 +95,7 @@ def change_city():
             global current_city
             if change_city_input != current_city:
                 current_city = change_city_input
-                print('You\'re now in ' + cities[current_city][0] + '.')
+                print('You\'re now in ' + cities[current_city] + '.')
                 reroll_market()
                 compound_loan(1)
                 if loan >= loan_max:
@@ -105,7 +104,7 @@ def change_city():
                 else:
                     start_turn()
             else:
-                print('You\'re already in ' + cities[current_city][0] + '.')
+                print('You\'re already in ' + cities[current_city] + '.')
                 player_input()
         else:
             print('Invalid input. Please try again...')
@@ -143,7 +142,7 @@ def complete_purchase(item):
                                                 + str(max_purchasable) + ')\n>> '))
             if cash >= (complete_purchase_input * market[item].value):
                 cash -= complete_purchase_input * market[item].value
-                stash[item][1] += complete_purchase_input
+                player.stash_add(market[item], complete_purchase_input)
                 show_stash()
                 player_input()
             else:
@@ -172,16 +171,14 @@ def sell_items():
 
 def complete_sale(item):
     global cash
-    if stash[item][1] == 0:
-        print('You\'ve got no ' + market[item].name + ' to sell...')
-        sell_items()
-    else:
+    stash_item = player.stash_get(market[item])
+    if stash_item is not None:
+        max_sellable = stash_item[1]
         try:
-            max_sellable = stash[item][1]
             complete_sale_input = int(input('How many ' + market[item].name + ' do you want to sell? (max: '
                                             + str(max_sellable) + ')\n>> '))
-            if stash[item][1] >= complete_sale_input:
-                stash[item][1] -= complete_sale_input
+            if stash_item[1] >= complete_sale_input:
+                stash_item[1] -= complete_sale_input
                 cash += complete_sale_input * market[item].value
                 show_stash()
                 player_input()
@@ -191,6 +188,9 @@ def complete_sale(item):
         except ValueError:
             print('Invalid input. Please try again...')
             complete_sale(item)
+    else:
+        print('You\'ve got no ' + market[item].name + ' to sell...')
+        sell_items()
 
 
 def pay_loan():
@@ -221,6 +221,7 @@ def pay_loan():
                       + ' outstanding.')
                 loan -= pay_loan_input
                 cash -= pay_loan_input
+                player_input()
     except ValueError:
         print('Invalid input. Please try again...')
         pay_loan()
@@ -256,15 +257,20 @@ def intro():
 
 def show_stash():
     print('Your stash:')
-    print(tabulate(stash, headers=["Item", "Quantity"], tablefmt="simple", floatfmt=".2f") + '\n')
+    print('Item'.ljust(10) + '| Quantity'.ljust(15))
+    print(''.ljust(10, '-') + '+'.ljust(15, '-'))
+    for stash_item in player.stash:
+        print(str(stash_item[0].name).ljust(10) + ('| ' + str(stash_item[1])).ljust(15))
+    print('\n')
 
 
 def show_market():
-    print('Local market values in ' + cities[current_city][0] + ' are:')
+    print('Local market values in ' + cities[current_city] + ' are:')
     print('Item'.ljust(10) + '| Price ($)'.ljust(15))
     print(''.ljust(10, '-') + '+'.ljust(15, '-'))
     for item in market:
         print(str(item.name).ljust(10) + f'| ${item.value:.2f}'.ljust(15))
+    print('\n')
 
 
 def show_current_city():
@@ -288,8 +294,8 @@ def show_position_summary():
     for item in market:
         print(('| ' + item.name).ljust(40) + str(f'${item.value:.2f}').ljust(29) + '|')
     print('+-[ STASH SUMMARY ]'.ljust(69, '-') + '+')
-    for item in player.stash:
-        print(('| ' + item[0].name).ljust(40) + str(item[1]).ljust(29) + '|')
+    for stash_item in player.stash:
+        print(('| ' + stash_item[0].name).ljust(40) + str(stash_item[1]).ljust(29) + '|')
     print('+'.ljust(69, '-') + '+')
     print('\n')
 
