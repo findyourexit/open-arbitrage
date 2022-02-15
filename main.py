@@ -1,6 +1,7 @@
 from tabulate import tabulate
 import random
 from marketplace import *
+from player import *
 
 market = [Item('a', 10.00),
           Item('b', 50.00),
@@ -8,6 +9,8 @@ market = [Item('a', 10.00),
           Item('d', 30.00),
           Item('e', 5.00),
           Item('f', 1.00)]
+
+player = Player('Tom')
 
 stash = [['a', 0], ['b', 0], ['c', 0], ['d', 0], ['e', 50], ['f', 0]]
 cities = ('Sydney', 'Melbourne', 'Zurich', 'New York', 'Milano', 'Santa Barbara')
@@ -33,6 +36,7 @@ def start_game(name):
     play_response = input('\nThink you\'ve got what it takes? (Y/N)\n>> ').lower()
     if play_response == 'y':
         print('\nAlright, let\'s do this!\n')
+        player.stash_add(market[4], 50)
         start_turn()
     elif play_response == 'n':
         print('\nScared, huh? Nah, I get it. ')
@@ -44,16 +48,12 @@ def start_game(name):
 def start_turn():
     # Maybe include an adverse event here to impact stash, cash, or whatever.
     # Manipulate the market here.
-    position_summary()
+    show_position_summary()
     player_input()
 
 
 def end_game():
     print('Game over.')
-
-
-def position_summary():  # This needs to be formatted such that it can appear in an easily digested table.
-    show_position_summary()
 
 
 def player_input():
