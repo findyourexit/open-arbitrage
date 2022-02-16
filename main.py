@@ -1,4 +1,4 @@
-import random
+import marketplace
 from marketplace import *
 from player import *
 
@@ -86,7 +86,7 @@ def change_city():
             if change_city_input != player.current_city:
                 player.current_city = change_city_input
                 print('You\'re now in ' + cities[player.current_city] + '.')
-                reroll_market()
+                marketplace.fluctuate_market(market)
                 compound_loan(1)
                 if player.loan >= player.loan_max:
                     print('You\'re drowning in debt.')
@@ -214,20 +214,8 @@ def pay_loan():
         pay_loan()
 
 
-def reroll_market():
-    for item in market:
-        item.last_value = item.value
-        reroll = item.value * random.uniform(0.5, 1.5)
-        if reroll < item.min_value:
-            item.value = item.min_value
-        elif reroll > item.max_value:
-            item.value = item.max_value
-        else:
-            item.value = reroll
-
-
 def compound_loan(days):
-    for i in range(days):
+    for j in range(days):
         player.loan += player.loan * player.interest_rate
 
 

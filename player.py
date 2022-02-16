@@ -3,8 +3,8 @@ class Player:
         self.name = 'Unknown'
         self.cash = 200
         self.loan = 10000
-        self.loan_max = 100000
-        self.interest_rate = 0.20
+        self.loan_max = 200000
+        self.interest_rate = 0.15
         self.current_city = 0
         self.stash = []
 
