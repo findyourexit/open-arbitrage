@@ -215,7 +215,7 @@ def pay_loan():
 
 
 def compound_loan(days):
-    for i in range(days):
+    for j in range(days):
         player.loan += player.loan * player.interest_rate
 
 
