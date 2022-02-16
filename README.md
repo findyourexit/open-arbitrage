@@ -6,11 +6,12 @@ The mechanics are rather simple. Just follow the prompts and use your best judge
 
 ### Future :chart_with_upwards_trend:
 - [x] Seperate out code into single-responsibility modules. (Partly left as-is, for the moment)
-- [ ] Improve market reroll.
+- [x] Improve market reroll.
 - [ ] Add random event mechanic.
 - [x] Improve start turn overview/position summary table.
 - [ ] Add cost to travel mechanic.
 - [ ] Add travel methods mechanic.
 - [ ] Improve buy/sell mechanic.
+- [ ] Implement backpack size mechanic.
 
 More to come...
