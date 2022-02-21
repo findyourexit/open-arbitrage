@@ -286,5 +286,11 @@ def show_position_summary():
 
 
 if __name__ == '__main__':
+    # for i in range(100):
+    #     fluctuate_market_experimental(market)
+    #     for item in market:
+    #         print(str(f'${item.value:.2f}').ljust(10), end='')
+    #     print('\n')
+
     intro()
     start_game(input('\nBefore we being, what should I call you?\n>> '))

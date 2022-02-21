@@ -1,3 +1,5 @@
+from random import gauss
+from math import sqrt, exp
 import random
 
 
@@ -36,3 +38,11 @@ def fluctuate_market(market):
             item.value = item.max_value
         else:
             item.value = new_value
+
+
+def fluctuate_market_experimental(market):
+    mu = 0.5
+    sigma = mu / 2
+
+    for item in market:
+        item.value *= exp((mu - 0.5 * sigma ** 2) * (1. / 365.) + sigma * sqrt(1. / 365.) * gauss(mu=0, sigma=1))
