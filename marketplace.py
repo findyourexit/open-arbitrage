@@ -1,6 +1,7 @@
 from random import gauss
 from math import sqrt, exp
 import random
+import matplotlib.pyplot as plt
 
 
 class Item:
@@ -46,3 +47,24 @@ def fluctuate_market_experimental(market):
 
     for item in market:
         item.value *= exp((mu - 0.5 * sigma ** 2) * (1. / 365.) + sigma * sqrt(1. / 365.) * gauss(mu=0, sigma=1))
+
+
+def simulate_market(iterations, market):
+    iteration_indexes = range(iterations)
+    simulated_history = [[], [], [], [], [], []]
+
+    for i in range(iterations):
+        fluctuate_market_experimental(market)
+        for idx, item in enumerate(market):
+            simulated_history[idx].append(item.value)
+            print(str(f'${item.value:.2f}').ljust(10), end='')
+        print('\n', end='')
+
+    for idx, item in enumerate(simulated_history):
+        plt.plot(iteration_indexes, simulated_history[idx], label='Item ' + market[idx].name)
+
+    plt.xlabel('Day')
+    plt.ylabel('Value ($)')
+    plt.title('Market Simulation (' + str(iterations) + ' iterations)')
+    plt.legend()
+    plt.show()
