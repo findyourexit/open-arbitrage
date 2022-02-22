@@ -22,7 +22,7 @@ from random_games import blackjack_play
 random_events = {
     'Blackjack' : 
                 { 
-                    'intro_text' : 'In a drunken daze you regain consciousness whilst at the Blackjack table. The dealer shows a X[?] and you show a Y[?]. You have $Z at stake.',
+                    'intro_text' : 'In a drunken daze you regain consciousness whilst at the Blackjack table. The dealer shows a {dealer} and you show a {user}. You have ${stake:.2f} at stake.',
                     'call_to_action' : 'Do you Hit or Stand? (H/S)',
                     'func_calc' : blackjack_play 
                 }
@@ -30,15 +30,31 @@ random_events = {
 
 def get_random_event(player):
 
+    # get event name
     event_name = random.choice(list(random_events))
 
-    intro_text = random_events[event_name]['intro_text']
+    # Formatting stuff, make this more generic and therefore extensible in future
+    intro_text_unf = random_events[event_name]['intro_text']
+    dealer_num = random.randrange(10) + 2   # generate from 2..11 
+    user_num = random.randrange(16) + 2     # generate from 2..17
+    stake = 3500
+    intro_text_form = intro_text_unf.format(dealer = dealer_num, user = user_num, stake = stake)
+
     call_to_action = random_events[event_name]['call_to_action']
+
+    # TODO: figure a proper way to deduce what arguments this should get as the function could be anything
     game_fn = random_events[event_name]['func_calc']
 
-    populateScreenWithEvent(intro_text, call_to_action)
+    populateScreenWithEvent(intro_text_form, call_to_action)
 
-    net_gain = game_fn(23, 45)
+
+    # game loop and win logic
+    won_game = game_fn(dealer_num, user_num)
+
+    net_gain = stake
+
+    if not won_game:
+        net_gain = -net_gain
 
     print (f'User gained ${net_gain}')
     
