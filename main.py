@@ -1,6 +1,7 @@
 import marketplace
 from marketplace import *
 from player import *
+from random_events import get_random_event
 
 
 market = [Item('a', 10.00),
@@ -41,8 +42,14 @@ def start_game(name):
 def start_turn():
     # Maybe include an adverse event here to impact stash, cash, or whatever.
     # Manipulate the market here.
-    show_position_summary()
-    player_input()
+
+    is_special_event = True
+
+    if (is_special_event):
+        get_random_event(player)
+    else:
+        show_position_summary()
+        player_input()
 
 
 def end_game():
