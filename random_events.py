@@ -46,9 +46,9 @@ def populateScreenWithEvent(intro_text, call_to_action):
 
 def get_multiline(text):
 
-    multi_string = "|"
+    multi_string = "| "
 
-    max_chars_per_line = 52
+    max_chars_per_line = 53
     curr_chars = 0
 
     for char in text:
@@ -60,8 +60,8 @@ def get_multiline(text):
 
         else:
             
-            multi_string += f'|\n|{char}'
-            curr_chars = 0
+            multi_string += f' |\n| {char}'
+            curr_chars = 1
 
 
     return multi_string
