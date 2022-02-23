@@ -14,4 +14,9 @@ The mechanics are rather simple. Just follow the prompts and use your best judge
 - [ ] Improve buy/sell mechanic.
 - [ ] Implement backpack size mechanic.
 
-More to come...
+_More to come..._
+
+### Contributors 👯
+<a href="https://github.com/findyourexit/open-arbitrage/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=findyourexit/open-arbitrage" />
+</a>
