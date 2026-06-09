@@ -1,22 +1,22 @@
-"""Pure game engine models and commands."""
+"""Pure game engine: state, commands, and deterministic logic (UI-agnostic)."""
 
 from __future__ import annotations
 
 import random
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
-from ..market import Item, clone_items, fluctuate_market
+from ..market import Good, Market, Quote, build_market
 
-DEFAULT_ITEMS: list[Item] = [
-    Item("a", 10.00),
-    Item("b", 50.00),
-    Item("c", 25.00),
-    Item("d", 30.00),
-    Item("e", 5.00),
-    Item("f", 1.00),
+DEFAULT_GOODS: list[Good] = [
+    Good("coffee", 10.00),
+    Good("watches", 50.00),
+    Good("wine", 25.00),
+    Good("silk", 30.00),
+    Good("spice", 5.00),
+    Good("grain", 1.00),
 ]
 DEFAULT_CITIES: Sequence[str] = (
     "Sydney",
@@ -51,7 +51,7 @@ class Inventory:
     holdings: dict[str, int] = field(default_factory=dict)
     capacity: int | None = None
 
-    def add(self, item_name: str, quantity: int) -> None:
+    def add(self, good_name: str, quantity: int) -> None:
         if quantity < 0:
             raise ValueError("Quantity must be non-negative")
         if quantity == 0:
@@ -59,28 +59,28 @@ class Inventory:
         new_total = self.total_quantity() + quantity
         if self.capacity is not None and new_total > self.capacity:
             raise ValueError("Inventory capacity exceeded")
-        self.holdings[item_name] = self.holdings.get(item_name, 0) + quantity
+        self.holdings[good_name] = self.holdings.get(good_name, 0) + quantity
 
-    def remove(self, item_name: str, quantity: int) -> None:
+    def remove(self, good_name: str, quantity: int) -> None:
         if quantity < 0:
             raise ValueError("Quantity must be non-negative")
-        current = self.holdings.get(item_name, 0)
+        current = self.holdings.get(good_name, 0)
         if quantity > current:
             raise ValueError("Not enough inventory to remove")
         remaining = current - quantity
         if remaining == 0:
-            self.holdings.pop(item_name, None)
+            self.holdings.pop(good_name, None)
         else:
-            self.holdings[item_name] = remaining
+            self.holdings[good_name] = remaining
 
     def total_quantity(self) -> int:
         return sum(self.holdings.values())
 
-    def quantity(self, item_name: str) -> int:
-        return self.holdings.get(item_name, 0)
+    def quantity(self, good_name: str) -> int:
+        return self.holdings.get(good_name, 0)
 
 
-class GameOutcome(str, Enum):
+class GameOutcome(StrEnum):
     ONGOING = "ongoing"
     WON = "won"
     LOST = "lost"
@@ -93,6 +93,12 @@ class Rules:
     inventory_capacity: int | None = 100
     win_net_worth: float = 20_000.0
     max_days: int | None = 365
+    # Trading friction: half-spread applied to every buy (ask) and sell (bid).
+    trade_spread: float = 0.02
+    # Per-city price dynamics.
+    price_reversion: float = 0.15
+    price_volatility: float = 0.08
+    city_price_spread: tuple[float, float] = (0.7, 1.3)
     daily_event_chance: float = 0.3
     travel_event_chance: float = 0.2
     event_log_limit: int | None = 200
@@ -123,8 +129,8 @@ class Rules:
     )
     spoilage_item_multipliers: dict[str, float] = field(
         default_factory=lambda: {
-            "e": 1.2,
-            "f": 1.4,
+            "spice": 1.2,
+            "grain": 1.4,
         }
     )
 
@@ -136,7 +142,7 @@ class GameState:
     cash: float
     loan: LoanAccount
     inventory: Inventory
-    market: list[Item]
+    market: Market
     cities: Sequence[str]
     rng: random.Random
     rules: Rules
@@ -152,13 +158,13 @@ class GameState:
 # Commands
 @dataclass
 class Buy:
-    item_name: str
+    good_name: str
     quantity: int
 
 
 @dataclass
 class Sell:
-    item_name: str
+    good_name: str
     quantity: int
 
 
@@ -188,13 +194,19 @@ Command = Buy | Sell | Travel | RepayLoan | AdvanceDay | SetSeed
 def create_default_state(seed: int | None = None, rules: Rules | None = None) -> GameState:
     rng = random.Random(seed)
     game_rules = rules or Rules()
+    market = build_market(
+        DEFAULT_GOODS,
+        DEFAULT_CITIES,
+        rng,
+        city_price_spread=game_rules.city_price_spread,
+    )
     return GameState(
         day=0,
         city_index=0,
-        cash=250.0,
+        cash=2_000.0,
         loan=LoanAccount(balance=10_000.0, rate=0.01, max_balance=200_000.0),
         inventory=Inventory(capacity=game_rules.inventory_capacity),
-        market=clone_items(DEFAULT_ITEMS),
+        market=market,
         cities=DEFAULT_CITIES,
         rng=rng,
         rules=game_rules,
@@ -203,11 +215,29 @@ def create_default_state(seed: int | None = None, rules: Rules | None = None) ->
     )
 
 
-def _find_item(market: Iterable[Item], item_name: str) -> Item:
-    for item in market:
-        if item.name == item_name:
-            return item
-    raise ValueError(f"Unknown item: {item_name}")
+# --- Pricing helpers ------------------------------------------------------
+
+
+def _mid_price(state: GameState, good_name: str) -> float:
+    return state.market.quote(state.city_index, good_name).value
+
+
+def ask_price(state: GameState, good_name: str) -> float:
+    """Price to buy one unit in the current city (mid + half-spread)."""
+    return _mid_price(state, good_name) * (1.0 + state.rules.trade_spread)
+
+
+def bid_price(state: GameState, good_name: str) -> float:
+    """Price received to sell one unit in the current city (mid - half-spread)."""
+    return _mid_price(state, good_name) * (1.0 - state.rules.trade_spread)
+
+
+def _fluctuate_world(state: GameState) -> None:
+    state.market.fluctuate(
+        state.rng,
+        reversion=state.rules.price_reversion,
+        volatility=state.rules.price_volatility,
+    )
 
 
 def apply_command(state: GameState, command: Command) -> None:
@@ -219,8 +249,10 @@ def apply_command(state: GameState, command: Command) -> None:
         return
 
     if isinstance(command, AdvanceDay):
+        if command.days < 1:
+            raise ValueError("Days to advance must be positive")
         for _ in range(command.days):
-            fluctuate_market(state.market, rng=state.rng)
+            _fluctuate_world(state)
             _apply_daily_event(state)
             state.loan.compound(1)
             state.day += 1
@@ -238,32 +270,32 @@ def apply_command(state: GameState, command: Command) -> None:
         state.city_index = command.destination_index
         travel_days = state.rules.travel_time_days + _apply_travel_event(state)
         for _ in range(travel_days):
-            fluctuate_market(state.market, rng=state.rng)
+            _fluctuate_world(state)
             state.loan.compound(1)
             state.day += 1
         _evaluate_outcome(state)
         return
 
     if isinstance(command, Buy):
-        item = _find_item(state.market, command.item_name)
         if command.quantity <= 0:
             raise ValueError("Quantity must be positive")
-        cost = item.value * command.quantity
+        unit_price = ask_price(state, command.good_name)
+        cost = unit_price * command.quantity
         if cost > state.cash:
             raise ValueError("Insufficient cash")
+        state.inventory.add(command.good_name, command.quantity)
         state.cash -= cost
-        state.inventory.add(item.name, command.quantity)
         _evaluate_outcome(state)
         return
 
     if isinstance(command, Sell):
-        item = _find_item(state.market, command.item_name)
         if command.quantity <= 0:
             raise ValueError("Quantity must be positive")
-        if state.inventory.quantity(item.name) < command.quantity:
+        if state.inventory.quantity(command.good_name) < command.quantity:
             raise ValueError("Insufficient inventory")
-        state.inventory.remove(item.name, command.quantity)
-        state.cash += item.value * command.quantity
+        unit_price = bid_price(state, command.good_name)
+        state.inventory.remove(command.good_name, command.quantity)
+        state.cash += unit_price * command.quantity
         _evaluate_outcome(state)
         return
 
@@ -281,14 +313,14 @@ def apply_command(state: GameState, command: Command) -> None:
 
 
 def _inventory_value(state: GameState) -> float:
+    """Liquidation value of held goods at the current city's bid prices."""
     value = 0.0
     for name, qty in state.inventory.holdings.items():
-        item = _find_item(state.market, name)
-        value += item.value * qty
+        value += bid_price(state, name) * qty
     return value
 
 
-def _net_worth(state: GameState) -> float:
+def net_worth(state: GameState) -> float:
     return state.cash + _inventory_value(state) - state.loan.balance
 
 
@@ -367,19 +399,24 @@ def _apply_travel_event(state: GameState) -> int:
     return 0
 
 
+def _clamp_quote(quote: Quote, value: float) -> None:
+    quote.value = min(max(value, quote.min_value), quote.max_value)
+
+
 def _event_demand_spike(state: GameState) -> None:
-    item = state.rng.choice(state.market)
-    before_value = item.value
+    board = state.market.board(state.city_index)
+    quote = state.rng.choice(board)
+    before_value = quote.value
     multiplier = state.rng.uniform(1.25, 1.6)
-    item.value *= multiplier
+    _clamp_quote(quote, quote.value * multiplier)
     _append_event(
         state,
         "demand_spike",
         {
-            "item": item.name,
+            "good": quote.good,
             "multiplier": multiplier,
             "before_value": before_value,
-            "after_value": item.value,
+            "after_value": quote.value,
         },
     )
 
@@ -407,8 +444,7 @@ def _event_theft(state: GameState) -> None:
 
     loss_value = 0.0
     for name, qty in removed.items():
-        item = _find_item(state.market, name)
-        loss_value += item.value * qty
+        loss_value += _mid_price(state, name) * qty
     state.last_loss_value += loss_value
 
     _append_event(
@@ -416,6 +452,7 @@ def _event_theft(state: GameState) -> None:
         "theft",
         {
             "removed": removed,
+            "loss_value": loss_value,
         },
     )
 
@@ -469,24 +506,23 @@ def _event_spoilage(state: GameState) -> None:
     items = list(state.inventory.holdings.keys())
     if state.rules.spoilage_item_multipliers:
         weights = [state.rules.spoilage_item_multipliers.get(name, 1.0) for name in items]
-        item_name = state.rng.choices(items, weights=weights, k=1)[0]
+        good_name = state.rng.choices(items, weights=weights, k=1)[0]
     else:
-        item_name = state.rng.choice(items)
-    current_qty = state.inventory.quantity(item_name)
+        good_name = state.rng.choice(items)
+    current_qty = state.inventory.quantity(good_name)
     if current_qty == 0:
         return
     fraction = state.rng.uniform(0.1, 0.3)
     to_remove = max(1, int(current_qty * fraction))
     to_remove = min(to_remove, current_qty)
-    state.inventory.remove(item_name, to_remove)
-    item = _find_item(state.market, item_name)
-    loss_value = item.value * to_remove
+    state.inventory.remove(good_name, to_remove)
+    loss_value = _mid_price(state, good_name) * to_remove
     state.last_loss_value += loss_value
     _append_event(
         state,
         "spoilage",
         {
-            "item": item_name,
+            "good": good_name,
             "removed": to_remove,
             "loss_value": loss_value,
         },
@@ -495,16 +531,15 @@ def _event_spoilage(state: GameState) -> None:
 
 def _event_market_shock(state: GameState) -> None:
     multiplier = state.rng.uniform(0.85, 1.15)
-    before = {item.name: item.value for item in state.market}
-    for item in state.market:
-        item.value *= multiplier
+    for board in state.market.boards:
+        for quote in board:
+            _clamp_quote(quote, quote.value * multiplier)
     _append_event(
         state,
         "market_shock",
         {
             "multiplier": multiplier,
-            "before": before,
-            "after": {item.name: item.value for item in state.market},
+            "scope": "global",
         },
     )
 
@@ -553,13 +588,13 @@ def _evaluate_outcome(state: GameState) -> None:
         return
 
     if state.rules.max_days is not None and state.day >= state.rules.max_days:
-        if _net_worth(state) >= state.rules.win_net_worth:
+        if net_worth(state) >= state.rules.win_net_worth:
             state.status = GameOutcome.WON
         else:
             state.status = GameOutcome.LOST
         return
 
-    if _net_worth(state) >= state.rules.win_net_worth:
+    if net_worth(state) >= state.rules.win_net_worth:
         state.status = GameOutcome.WON
 
 
@@ -568,7 +603,24 @@ def _ensure_ongoing(state: GameState) -> None:
         raise ValueError("Game is finished")
 
 
-STATE_VERSION = 1
+STATE_VERSION = 2
+
+
+def _encode_rng_state(rng: random.Random) -> dict[str, Any]:
+    version, internal, gauss_next = rng.getstate()
+    return {
+        "version": version,
+        "internal": list(internal),
+        "gauss_next": gauss_next,
+    }
+
+
+def _decode_rng_state(data: dict[str, Any]) -> tuple[int, tuple[int, ...], float | None]:
+    return (
+        int(data["version"]),
+        tuple(int(value) for value in data["internal"]),
+        data["gauss_next"],
+    )
 
 
 def state_to_dict(state: GameState) -> dict[str, Any]:
@@ -586,17 +638,31 @@ def state_to_dict(state: GameState) -> dict[str, Any]:
             "holdings": state.inventory.holdings,
             "capacity": state.inventory.capacity,
         },
-        "market": [
-            {
-                "name": item.name,
-                "value": item.value,
-                "base_value": item.base_value,
-                "min_value": item.min_value,
-                "max_value": item.max_value,
-                "last_value": item.last_value,
-            }
-            for item in state.market
-        ],
+        "market": {
+            "goods": [
+                {
+                    "name": good.name,
+                    "base_value": good.base_value,
+                    "min_value": good.min_value,
+                    "max_value": good.max_value,
+                }
+                for good in state.market.goods
+            ],
+            "boards": [
+                [
+                    {
+                        "good": quote.good,
+                        "value": quote.value,
+                        "base_value": quote.base_value,
+                        "min_value": quote.min_value,
+                        "max_value": quote.max_value,
+                        "last_value": quote.last_value,
+                    }
+                    for quote in board
+                ]
+                for board in state.market.boards
+            ],
+        },
         "cities": list(state.cities),
         "rules": {
             "travel_cost": state.rules.travel_cost,
@@ -604,6 +670,10 @@ def state_to_dict(state: GameState) -> dict[str, Any]:
             "inventory_capacity": state.rules.inventory_capacity,
             "win_net_worth": state.rules.win_net_worth,
             "max_days": state.rules.max_days,
+            "trade_spread": state.rules.trade_spread,
+            "price_reversion": state.rules.price_reversion,
+            "price_volatility": state.rules.price_volatility,
+            "city_price_spread": list(state.rules.city_price_spread),
             "daily_event_chance": state.rules.daily_event_chance,
             "travel_event_chance": state.rules.travel_event_chance,
             "event_log_limit": state.rules.event_log_limit,
@@ -614,6 +684,7 @@ def state_to_dict(state: GameState) -> dict[str, Any]:
         },
         "status": state.status.value,
         "seed": state.seed,
+        "rng_state": _encode_rng_state(state.rng),
         "event_log": list(state.event_log),
         "last_loss_value": state.last_loss_value,
     }
@@ -623,35 +694,59 @@ def state_from_dict(payload: dict[str, Any]) -> GameState:
     if payload.get("version") != STATE_VERSION:
         raise ValueError("Unsupported state version")
 
+    raw_rules = payload["rules"]
+    spread = raw_rules.get("city_price_spread", [0.7, 1.3])
     rules = Rules(
-        travel_cost=payload["rules"]["travel_cost"],
-        travel_time_days=payload["rules"]["travel_time_days"],
-        inventory_capacity=payload["rules"].get("inventory_capacity"),
-        win_net_worth=payload["rules"]["win_net_worth"],
-        max_days=payload["rules"].get("max_days"),
-        daily_event_chance=payload["rules"].get("daily_event_chance", 0.0),
-        travel_event_chance=payload["rules"].get("travel_event_chance", 0.0),
-        event_log_limit=payload["rules"].get("event_log_limit"),
-        daily_event_weights=dict(payload["rules"].get("daily_event_weights", {})),
-        travel_event_weights=dict(payload["rules"].get("travel_event_weights", {})),
-        city_event_multipliers=dict(payload["rules"].get("city_event_multipliers", {})),
-        spoilage_item_multipliers=dict(payload["rules"].get("spoilage_item_multipliers", {})),
+        travel_cost=raw_rules["travel_cost"],
+        travel_time_days=raw_rules["travel_time_days"],
+        inventory_capacity=raw_rules.get("inventory_capacity"),
+        win_net_worth=raw_rules["win_net_worth"],
+        max_days=raw_rules.get("max_days"),
+        trade_spread=raw_rules.get("trade_spread", 0.0),
+        price_reversion=raw_rules.get("price_reversion", 0.15),
+        price_volatility=raw_rules.get("price_volatility", 0.08),
+        city_price_spread=(float(spread[0]), float(spread[1])),
+        daily_event_chance=raw_rules.get("daily_event_chance", 0.0),
+        travel_event_chance=raw_rules.get("travel_event_chance", 0.0),
+        event_log_limit=raw_rules.get("event_log_limit"),
+        daily_event_weights=dict(raw_rules.get("daily_event_weights", {})),
+        travel_event_weights=dict(raw_rules.get("travel_event_weights", {})),
+        city_event_multipliers=dict(raw_rules.get("city_event_multipliers", {})),
+        spoilage_item_multipliers=dict(raw_rules.get("spoilage_item_multipliers", {})),
     )
 
     seed = payload.get("seed")
-    rng = random.Random(seed)
+    rng = random.Random()
+    if payload.get("rng_state") is not None:
+        rng.setstate(_decode_rng_state(payload["rng_state"]))
+    elif seed is not None:
+        rng.seed(seed)
 
-    market = [
-        Item(
-            name=item["name"],
-            value=item["value"],
-            base_value=item["base_value"],
-            min_value=item["min_value"],
-            max_value=item["max_value"],
-            last_value=item["last_value"],
-        )
-        for item in payload["market"]
-    ]
+    market = Market(
+        goods=[
+            Good(
+                name=good["name"],
+                base_value=good["base_value"],
+                min_value=good["min_value"],
+                max_value=good["max_value"],
+            )
+            for good in payload["market"]["goods"]
+        ],
+        boards=[
+            [
+                Quote(
+                    good=quote["good"],
+                    value=quote["value"],
+                    base_value=quote["base_value"],
+                    min_value=quote["min_value"],
+                    max_value=quote["max_value"],
+                    last_value=quote["last_value"],
+                )
+                for quote in board
+            ]
+            for board in payload["market"]["boards"]
+        ],
+    )
 
     state = GameState(
         day=payload["day"],

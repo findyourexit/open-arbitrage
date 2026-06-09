@@ -15,41 +15,47 @@ def test_dump_state_outputs_json():
     payload = json.loads(result.stdout)
     assert payload["seed"] == 5
     assert payload["day"] == 0
-    assert "market" in payload
-    assert "event_log" in payload
+    assert payload["version"] == 2
+    assert "market" in payload and "boards" in payload["market"]
+    assert "rng_state" in payload
 
 
-def test_render_state_renders_tables():
+def test_render_state_renders_tables_with_arbitrage_hint():
     state = create_default_state(seed=1)
-    state.inventory.holdings = {"a": 2}
+    state.inventory.holdings = {"coffee": 2}
     state.event_log = [
-        {"day": 1, "kind": "note", "city": state.current_city(), "details": {"k": "v"}}
+        {"day": 1, "kind": "note", "city": state.current_city(), "details": {"amount": 12.5}}
     ]
-    console = Console(record=True)
+    console = Console(record=True, width=200)
 
     cli.render_state(state, console)
 
     output = console.export_text()
     assert "Position" in output
+    assert "Net Worth" in output
+    assert "Best elsewhere" in output
     assert "Recent Events" in output
 
 
-def test_format_event_details_round_trips_dict():
-    details = {"foo": 1, "bar": "baz"}
-    formatted = cli._format_event_details(details)
-    assert "foo=1" in formatted and "bar=baz" in formatted
+def test_best_alternative_market_picks_highest_other_city():
+    state = create_default_state(seed=1)
+    alt = cli._best_alternative_market(state, "coffee")
+    assert alt is not None
+    city, bid = alt
+    assert city != state.current_city()
+    assert bid > 0
+
+
+def test_format_event_details_formats_floats():
+    formatted = cli._format_event_details({"amount": 1234.5, "good": "coffee"})
+    assert "amount=1,234.50" in formatted
+    assert "good=coffee" in formatted
 
 
 def test_play_quits_immediately(monkeypatch):
     prompts = iter(["q"])
-
-    def fake_prompt(*_: object, **__: object) -> str:  # pragma: no cover - trivial shim
-        return next(prompts)
-
-    monkeypatch.setattr(cli.typer, "prompt", fake_prompt)
-
+    monkeypatch.setattr(cli.typer, "prompt", lambda *_, **__: next(prompts))
     result = runner.invoke(cli.app, ["play", "--seed", "2", "--max-days", "1"])
-
     assert result.exit_code == 0
     assert "Goodbye" in result.stdout
 
@@ -58,13 +64,13 @@ def test_play_walks_actions(monkeypatch):
     prompts = iter(
         [
             "b",
-            "a",
+            "coffee",
             "0",  # invalid quantity -> error path
             "b",
-            "a",
+            "coffee",
             "1",  # valid buy
             "s",
-            "a",
+            "coffee",
             "1",  # sell
             "t",
             "1",  # travel
@@ -76,14 +82,11 @@ def test_play_walks_actions(monkeypatch):
             "q",
         ]
     )
-
-    def fake_prompt(*_: object, **__: object) -> str:  # pragma: no cover - deterministic
-        return next(prompts, "q")
-
-    monkeypatch.setattr(cli.typer, "prompt", fake_prompt)
+    monkeypatch.setattr(cli.typer, "prompt", lambda *_, **__: next(prompts, "q"))
 
     result = runner.invoke(
-        cli.app, ["play", "--seed", "3", "--travel-cost", "1", "--max-days", "5"]
+        cli.app,
+        ["play", "--seed", "3", "--travel-cost", "1", "--spread", "0.01", "--max-days", "5"],
     )
 
     assert result.exit_code == 0
@@ -92,14 +95,12 @@ def test_play_walks_actions(monkeypatch):
 
 
 def test_play_handles_finished_game(monkeypatch):
-    finished_state = create_default_state(seed=4)
-    finished_state.status = GameOutcome.WON
-
-    monkeypatch.setattr(cli, "create_default_state", lambda **_: finished_state)
+    finished = create_default_state(seed=4)
+    finished.status = GameOutcome.WON
+    monkeypatch.setattr(cli, "create_default_state", lambda **_: finished)
     monkeypatch.setattr(cli.typer, "prompt", lambda *_, **__: "q")
 
     result = runner.invoke(cli.app, ["play"])
-
     assert result.exit_code == 0
     assert "Game finished" in result.stdout
 
@@ -111,7 +112,5 @@ def test_cli_main_entrypoint_runs(monkeypatch):
         invoked["ran"] = True
 
     monkeypatch.setattr(cli, "app", fake_app)
-
     cli.main()
-
     assert invoked.get("ran") is True
